@@ -94,6 +94,10 @@ fn part_2_offsets_limited_search(grid: &Grid<(u8, u8), u8>) -> u32 {
             grid[i] = BLANK;
 
             for n in neighbors.into_iter() {
+                if grid[n] != ROLL {
+                    continue;
+                }
+
                 search.insert(n);
             }
         }
@@ -103,11 +107,11 @@ fn part_2_offsets_limited_search(grid: &Grid<(u8, u8), u8>) -> u32 {
         next_search.clear();
 
         for i in search.iter() {
+            let neighbors = neighbor_offsets(*i, width);
+
             if grid[*i] != ROLL {
                 continue;
             }
-
-            let neighbors = neighbor_offsets(*i, width);
 
             let neighbors_count = neighbors
                 .iter()
@@ -120,6 +124,10 @@ fn part_2_offsets_limited_search(grid: &Grid<(u8, u8), u8>) -> u32 {
                 grid[*i] = BLANK;
 
                 for n in neighbors.into_iter() {
+                    if grid[n] != ROLL {
+                        continue;
+                    }
+
                     next_search.insert(n);
                 }
             }

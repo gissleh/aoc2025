@@ -1,6 +1,15 @@
+mod and;
+mod delimited;
+mod map;
 mod number;
+mod repeat;
 
-pub use number::{base10_digit, base16_digit, uint, uint_hex};
+pub use number::{base10_digit, base16_digit, int, int_hex, uint, uint_hex};
+
+use and::{And, AndSkip};
+use delimited::DelimitedBy;
+use map::Map;
+use repeat::{GatherTarget, Repeat};
 
 #[derive(Clone, Copy)]
 pub struct Input<'i> {
@@ -9,37 +18,46 @@ pub struct Input<'i> {
 }
 
 impl<'i> Input<'i> {
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.data.is_empty()
     }
 
+    #[inline]
+    pub fn with_index(&self, index: usize) -> Self {
+        Self {
+            data: self.data,
+            index,
+        }
+    }
+
+    #[inline]
     pub fn from(data: &'i [u8]) -> Self {
         Self { data, index: 0 }
     }
 
+    #[inline]
     pub fn advance(&self, offset: usize) -> Self {
         #[cfg(debug_assertions)]
-        assert!(offset < self.data.len());
+        assert!(offset <= self.data.len());
 
         Self {
             data: &self.data[offset..],
             index: self.index,
         }
     }
-
-    pub fn advance_index(&self, data_offset: usize, index_offset: usize) -> Self {
-        #[cfg(debug_assertions)]
-        assert!(data_offset < self.data.len());
-
-        Self {
-            data: &self.data[data_offset..],
-            index: self.index + index_offset,
-        }
-    }
 }
 
-pub trait Parser<'i, T> {
+pub trait Parser<'i, T>: Sized {
     fn parse(&self, input: Input<'i>) -> Option<(T, Input<'i>)>;
+
+    #[inline]
+    fn parse_discard(&self, input: Input<'i>) -> Option<Input<'i>> {
+        match self.parse(input) {
+            Some((_, input)) => Some(input),
+            None => None,
+        }
+    }
 
     fn find_parsable(&self, input: Input<'i>) -> Option<(T, usize, Input<'i>)> {
         let mut input = input;
@@ -58,9 +76,46 @@ pub trait Parser<'i, T> {
 
         None
     }
+
+    #[inline]
+    fn and<TR, PR>(self, pr: PR) -> And<Self, PR, T, TR> {
+        And::new(self, pr)
+    }
+
+    #[inline]
+    fn and_skip<TR, PR>(self, pr: PR) -> AndSkip<Self, PR, T, TR> {
+        AndSkip::new(self, pr)
+    }
+
+    #[inline]
+    fn delimited_by<TD, PD>(self, pd: PD) -> DelimitedBy<Self, T, PD, TD> {
+        DelimitedBy::new(self, pd)
+    }
+
+    #[inline]
+    fn repeat<C: GatherTarget<T>>(self) -> Repeat<Self, T, C> {
+        Repeat::new(self)
+    }
+
+    #[inline]
+    fn map<F, TM>(self, f: F) -> Map<Self, T, TM, F>
+    where
+        F: Fn(T) -> TM,
+    {
+        Map::new(self, f)
+    }
+
+    #[inline]
+    fn run(&self, input: &'i [u8]) -> Option<T> {
+        match self.parse(Input::from(input)) {
+            Some((res, _)) => Some(res),
+            None => None,
+        }
+    }
 }
 
 impl<'i> Parser<'i, u8> for u8 {
+    #[inline]
     fn parse(&self, input: Input<'i>) -> Option<(u8, Input<'i>)> {
         if input.data.get(0) == Some(self) {
             Some((*self, input.advance(1)))
@@ -69,6 +124,7 @@ impl<'i> Parser<'i, u8> for u8 {
         }
     }
 
+    #[inline]
     fn find_parsable(&self, input: Input<'i>) -> Option<(u8, usize, Input<'i>)> {
         input
             .data
@@ -78,8 +134,9 @@ impl<'i> Parser<'i, u8> for u8 {
     }
 }
 
-impl<'i, 'p> Parser<'i, &'p [u8]> for &'p [u8] {
-    fn parse(&self, input: Input<'i>) -> Option<(&'p [u8], Input<'i>)> {
+impl<'i> Parser<'i, &'static [u8]> for &'static [u8] {
+    #[inline]
+    fn parse(&self, input: Input<'i>) -> Option<(&'static [u8], Input<'i>)> {
         if input.data.starts_with(self) {
             Some((self, input.advance(self.len())))
         } else {
@@ -87,7 +144,8 @@ impl<'i, 'p> Parser<'i, &'p [u8]> for &'p [u8] {
         }
     }
 
-    fn find_parsable(&self, input: Input<'i>) -> Option<(&'p [u8], usize, Input<'i>)> {
+    #[inline]
+    fn find_parsable(&self, input: Input<'i>) -> Option<(&'static [u8], usize, Input<'i>)> {
         if input.data.len() < self.len() {
             return None;
         }
@@ -95,5 +153,63 @@ impl<'i, 'p> Parser<'i, &'p [u8]> for &'p [u8] {
         (0..input.data.len() - self.len())
             .find(|i| input.data[*i..].starts_with(self))
             .map(|i| (*self, i, input.advance(i + self.len())))
+    }
+}
+
+impl<'i, P1, T1, P2, T2> Parser<'i, (T1, T2)> for (P1, P2)
+where
+    P1: Parser<'i, T1>,
+    P2: Parser<'i, T2>,
+{
+    #[inline]
+    fn parse(&self, input: Input<'i>) -> Option<((T1, T2), Input<'i>)> {
+        let (t1, input) = self.0.parse(input)?;
+        let (t2, input) = self.1.parse(input)?;
+        Some(((t1, t2), input))
+    }
+
+    #[inline]
+    fn parse_discard(&self, input: Input<'i>) -> Option<Input<'i>> {
+        let input = self.0.parse_discard(input)?;
+        let input = self.1.parse_discard(input)?;
+        Some(input)
+    }
+
+    #[inline]
+    fn find_parsable(&self, input: Input<'i>) -> Option<((T1, T2), usize, Input<'i>)> {
+        let (t1, offset, input) = self.0.find_parsable(input)?;
+        let (t2, input) = self.1.parse(input)?;
+        Some(((t1, t2), offset, input))
+    }
+}
+
+impl<'i, P1, T1, P2, T2, P3, T3> Parser<'i, (T1, T2, T3)> for (P1, P2, P3)
+where
+    P1: Parser<'i, T1>,
+    P2: Parser<'i, T2>,
+    P3: Parser<'i, T3>,
+{
+    #[inline]
+    fn parse(&self, input: Input<'i>) -> Option<((T1, T2, T3), Input<'i>)> {
+        let (t1, input) = self.0.parse(input)?;
+        let (t2, input) = self.1.parse(input)?;
+        let (t3, input) = self.2.parse(input)?;
+        Some(((t1, t2, t3), input))
+    }
+
+    #[inline]
+    fn parse_discard(&self, input: Input<'i>) -> Option<Input<'i>> {
+        let input = self.0.parse_discard(input)?;
+        let input = self.1.parse_discard(input)?;
+        let input = self.2.parse_discard(input)?;
+        Some(input)
+    }
+
+    #[inline]
+    fn find_parsable(&self, input: Input<'i>) -> Option<((T1, T2, T3), usize, Input<'i>)> {
+        let (t1, offset, input) = self.0.find_parsable(input)?;
+        let (t2, input) = self.1.parse(input)?;
+        let (t3, input) = self.2.parse(input)?;
+        Some(((t1, t2, t3), offset, input))
     }
 }

@@ -1,4 +1,5 @@
 use common::aoc::Runner;
+use common::parser::{Parser, uint};
 use hashbrown::HashSet;
 use std::cmp::max;
 use std::fmt::{Debug, Formatter};
@@ -12,6 +13,8 @@ pub fn main(r: &mut Runner, input: &[u8]) {
         "IDs",
         &parsed.iter().map(|v| (v.to - v.from) + 1).sum::<u64>(),
     );
+
+    r.info("Ranges", &parsed.len());
 }
 
 fn part_1(ranges: &[IDRange]) -> u64 {
@@ -42,42 +45,11 @@ fn part_2(ranges: &[IDRange]) -> u64 {
 }
 
 fn parse(input: &[u8]) -> Vec<IDRange> {
-    let mut res = Vec::with_capacity(input.len() / 8);
-    let mut curr = 0u64;
-    let mut prev = 0;
-
-    for ch in input.iter().copied() {
-        match ch {
-            b'0'..=b'9' => curr = curr * 10 + (ch - b'0') as u64,
-            b'-' => {
-                prev = curr;
-                curr = 0;
-            }
-            b',' | b'\n' => {
-                if curr == 0 {
-                    continue;
-                }
-
-                res.push(IDRange {
-                    from: prev,
-                    to: curr,
-                });
-
-                curr = 0;
-                prev = 0;
-            }
-            _ => unreachable!(),
-        }
-    }
-
-    if curr != 0 {
-        res.push(IDRange {
-            from: prev,
-            to: curr,
-        });
-    }
-
-    res
+    IDRange::parser()
+        .delimited_by(b',')
+        .repeat::<Vec<_>>()
+        .run(input)
+        .unwrap()
 }
 
 struct IDRange {
@@ -86,8 +58,17 @@ struct IDRange {
 }
 
 impl IDRange {
+    #[inline]
     fn repeating_ids(&self, reps: u32) -> RepeatingIDs {
         RepeatingIDs::new(self.from, self.to, reps)
+    }
+
+    #[inline]
+    fn parser<'i>() -> impl Parser<'i, IDRange> {
+        uint()
+            .and_skip(b'-')
+            .and(uint())
+            .map(|(from, to)| IDRange { from, to })
     }
 }
 
@@ -210,9 +191,7 @@ impl Eq for ProductID {}
 mod tests {
     use super::*;
 
-    const EXAMPLE: &[u8] = b"11-22,95-115,998-1012,1188511880-1188511890,222220-222224,
-1698522-1698528,446443-446449,38593856-38593862,565653-565659,
-824824821-824824827,2121212118-2121212124";
+    const EXAMPLE: &[u8] = b"11-22,95-115,998-1012,1188511880-1188511890,222220-222224,1698522-1698528,446443-446449,38593856-38593862,565653-565659,824824821-824824827,2121212118-2121212124\n";
 
     #[test]
     fn product_id_from_works() {
