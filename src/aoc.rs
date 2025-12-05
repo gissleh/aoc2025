@@ -56,14 +56,14 @@ impl Runner {
         }
     }
 
-    pub fn info<T>(&mut self, name: &'static str, value: &T)
+    pub fn info<T>(&mut self, name: &'static str, value: T)
     where
         T: Display,
     {
         self.infos.push((name, format!("{value}")));
     }
 
-    pub fn info_debug<T>(&mut self, name: &'static str, value: &T)
+    pub fn info_debug<T>(&mut self, name: &'static str, value: T)
     where
         T: Debug,
     {
@@ -96,6 +96,14 @@ impl Runner {
         v
     }
 
+    pub fn link(&mut self, src: &'static str, dst: &'static str) {
+        self.graph.connect(
+            self.graph.node(&src).unwrap(),
+            self.graph.node(&dst).unwrap(),
+            (),
+        )
+    }
+
     fn run<T, F>(&mut self, name: &'static str, f: F) -> (T, usize)
     where
         F: Fn() -> T,
@@ -114,18 +122,18 @@ impl Runner {
                 5..=9 => 100,
                 10..=19 => 50,
                 20..=49 => 20,
-                50..=99 => 10,
-                100..=299 => 4,
-                300..=499 => 2,
+                50..=299 => 10,
                 _ => 1,
             };
 
-            let before = Instant::now();
-            for _ in 0..runs {
-                res = f();
+            if runs > 1 {
+                let before = Instant::now();
+                for _ in 1..runs {
+                    res = f();
+                }
+                let after = Instant::now();
+                dur += after - before;
             }
-            let after = Instant::now();
-            dur = after - before;
         }
 
         let dur = dur.as_nanos() as i64 / runs as i64;

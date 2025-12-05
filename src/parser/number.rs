@@ -1,4 +1,4 @@
-use crate::parser::{Input, Parser};
+use super::{Input, Parser};
 use std::marker::PhantomData;
 use std::ops::{Add, Mul, Neg};
 
@@ -256,5 +256,16 @@ mod tests {
         assert_eq!(run(base16_digit(), b"gg"), None);
         assert_eq!(run(base10_digit(), b"gg"), None);
         assert_eq!(run(base10_digit(), b"aa"), None);
+    }
+
+    #[test]
+    fn num_x_num() {
+        assert_eq!(
+            uint()
+                .and_skip(b'x')
+                .and(uint())
+                .parse(Input::from(b"32x16")),
+            Some(((32u16, 16u16), Input::from(b"")))
+        )
     }
 }

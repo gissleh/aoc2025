@@ -70,3 +70,42 @@ where
         Some((vl, offset, input))
     }
 }
+
+pub struct AndSkipAny<PL, PR, TL, TR> {
+    left: PL,
+    right: PR,
+    spooky_ghost: PhantomData<(TL, TR)>,
+}
+
+impl<PL, PR, TL, TR> AndSkipAny<PL, PR, TL, TR> {
+    #[inline]
+    pub(crate) fn new(left: PL, right: PR) -> Self {
+        Self {
+            left,
+            right,
+            spooky_ghost: Default::default(),
+        }
+    }
+}
+
+impl<'i, PL, PR, TL, TR> Parser<'i, TL> for AndSkipAny<PL, PR, TL, TR>
+where
+    PL: Parser<'i, TL>,
+    PR: Parser<'i, TR>,
+{
+    fn parse(&self, input: Input<'i>) -> Option<(TL, Input<'i>)> {
+        let (vl, mut input) = self.left.parse(input)?;
+        while let Some(next) = self.right.parse_discard(input) {
+            input = next;
+        }
+        Some((vl, input))
+    }
+
+    fn find_parsable(&self, input: Input<'i>) -> Option<(TL, usize, Input<'i>)> {
+        let (vl, offset, mut input) = self.left.find_parsable(input)?;
+        while let Some(next) = self.right.parse_discard(input) {
+            input = next;
+        }
+        Some((vl, offset, input))
+    }
+}

@@ -1,10 +1,12 @@
 mod bfs;
+mod dfs;
 mod dijkstra;
 mod seen;
 
 pub use bfs::BFS;
+pub use dfs::DFS;
 pub use dijkstra::{Dijkstra, DijkstraDial};
-pub use seen::{KCHS, KCS, KS};
+pub use seen::{KCHS, KCS, KS, NoSeenSpace, Seen, SeenCost};
 
 pub trait Search<T> {
     fn reset(&mut self);

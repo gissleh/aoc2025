@@ -1,3 +1,4 @@
+use crate::grid::{Grid, GridCoordinate, GridCoordinate2D};
 use hashbrown::hash_map::Entry;
 use hashbrown::{HashMap, HashSet};
 use std::hash::Hash;
@@ -199,5 +200,45 @@ where
                 true
             }
         }
+    }
+}
+
+impl<T> Seen<T> for Grid<T, bool>
+where
+    T: GridCoordinate + GridCoordinate2D,
+{
+    #[inline]
+    fn reset(&mut self) {
+        self.fill(false);
+    }
+
+    #[inline]
+    fn has_seen(&self, key: &T) -> bool {
+        self[*key]
+    }
+
+    #[inline]
+    fn mark_seen(&mut self, key: &T) -> bool {
+        let cell = &mut self[*key];
+        let prev = *cell;
+        *cell = true;
+        !prev
+    }
+}
+
+pub struct NoSeenSpace;
+
+impl<K> Seen<K> for NoSeenSpace {
+    #[inline]
+    fn reset(&mut self) {}
+
+    #[inline]
+    fn has_seen(&self, _key: &K) -> bool {
+        false
+    }
+
+    #[inline]
+    fn mark_seen(&mut self, _key: &K) -> bool {
+        true
     }
 }

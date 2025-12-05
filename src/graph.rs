@@ -100,3 +100,67 @@ where
         }
     }
 }
+
+pub struct SimpleGraph<K> {
+    edges: Vec<Vec<u16>>,
+    map: HashMap<K, u16>,
+}
+
+impl<K> SimpleGraph<K> {
+    pub fn edges(&self, i: u16) -> impl Iterator<Item = u16> {
+        self.edges[i as usize].iter().copied()
+    }
+
+    pub fn connect(&mut self, src: u16, dst: u16) {
+        self.edges[src as usize].push(dst);
+    }
+
+    pub fn connect_mutual(&mut self, src: u16, dst: u16) {
+        self.edges[src as usize].push(dst);
+        self.edges[dst as usize].push(src);
+    }
+
+    pub fn len(&self) -> usize {
+        self.edges.len()
+    }
+
+    #[inline]
+    pub fn new() -> Self {
+        Self {
+            map: HashMap::new(),
+            edges: Vec::new(),
+        }
+    }
+
+    #[inline]
+    pub fn with_capacity(cap: usize) -> Self {
+        Self {
+            map: HashMap::with_capacity(cap),
+            edges: Vec::with_capacity(cap),
+        }
+    }
+}
+
+impl<K> SimpleGraph<K>
+where
+    K: Eq + Hash,
+{
+    pub fn node(&self, key: &K) -> Option<u16> {
+        self.map.get(key).copied()
+    }
+
+    pub fn insert(&mut self, key: K) -> u16 {
+        match self.map.entry(key) {
+            Entry::Occupied(entry) => {
+                let index = *entry.get();
+                index
+            }
+            Entry::Vacant(entry) => {
+                let index = self.edges.len() as u16;
+                entry.insert(index);
+                self.edges.push(Vec::with_capacity(16));
+                index
+            }
+        }
+    }
+}

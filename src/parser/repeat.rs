@@ -122,6 +122,51 @@ where
     }
 }
 
+pub struct RepeatFind<PI, TI, C> {
+    inner: PI,
+    spooky_ghost: PhantomData<(TI, C)>,
+}
+
+impl<PI, TI, C> RepeatFind<PI, TI, C> {
+    #[inline]
+    pub(crate) fn new(inner: PI) -> Self {
+        Self {
+            inner,
+            spooky_ghost: Default::default(),
+        }
+    }
+}
+
+impl<'i, PI, TI, C> Parser<'i, C> for RepeatFind<PI, TI, C>
+where
+    C: GatherTarget<TI>,
+    PI: Parser<'i, TI>,
+{
+    fn parse(&self, input: Input<'i>) -> Option<(C, Input<'i>)> {
+        let (first, _, mut input) = self.inner.find_parsable(input.with_index(0))?;
+
+        let mut res = C::init(1);
+        if res.gather(0, first) {
+            let mut index = 1;
+            while let Some((v, _, next)) = self.inner.find_parsable(input.with_index(index)) {
+                input = next;
+                if !res.gather(index, v) {
+                    break;
+                }
+                index += 1;
+            }
+        }
+
+        Some((res, input))
+    }
+
+    #[inline]
+    fn find_parsable(&self, input: Input<'i>) -> Option<(C, usize, Input<'i>)> {
+        let (res, input) = self.parse(input)?;
+        Some((res, 0, input))
+    }
+}
+
 pub trait GatherTarget<T> {
     fn init(size_hint: usize) -> Self;
     fn gather(&mut self, index: usize, t: T) -> bool;

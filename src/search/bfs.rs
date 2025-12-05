@@ -43,6 +43,7 @@ where
 {
     fn reset(&mut self) {
         self.seen.reset();
+        self.queue.clear();
     }
 
     fn push(&mut self, item: T) -> bool {

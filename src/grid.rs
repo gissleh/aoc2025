@@ -46,6 +46,20 @@ where
             (C::from_usize(x, y), cell)
         })
     }
+
+    #[allow(dead_code)]
+    pub fn print<F>(&self, format_fn: F)
+    where
+        F: Fn(&T) -> char,
+    {
+        for (p, v) in self.iter() {
+            if p.x() == 0 && p.y() > 0 {
+                println!();
+            }
+            print!("{}", format_fn(v));
+        }
+        println!();
+    }
 }
 
 impl<C, T> Grid<C, T>
@@ -86,6 +100,54 @@ where
 
 impl<C, T> Grid<C, T>
 where
+    T: Copy,
+{
+    #[inline]
+    pub fn fill(&mut self, t: T) {
+        self.data.fill(t);
+    }
+}
+
+impl<C, T> Grid<C, T>
+where
+    T: Copy + Default,
+{
+    #[inline]
+    pub fn clear(&mut self) {
+        self.data.fill(T::default());
+    }
+}
+
+impl<C, T> Grid<C, T>
+where
+    C: GridCoordinate + GridCoordinate2D,
+    T: Copy,
+{
+    pub fn new_with_value(size: C, value: T) -> Self {
+        Self {
+            data: vec![value; size.area()],
+            size,
+            width: size.x(),
+        }
+    }
+}
+
+impl<C, T> Grid<C, T>
+where
+    C: GridCoordinate + GridCoordinate2D,
+    T: Copy + Default,
+{
+    pub fn new_blank(size: C) -> Self {
+        Self {
+            data: vec![T::default(); size.area()],
+            size,
+            width: size.x(),
+        }
+    }
+}
+
+impl<C, T> Grid<C, T>
+where
     C: GridCoordinate2D,
 {
     #[inline]
@@ -120,6 +182,76 @@ where
     #[inline]
     fn index_mut(&mut self, index: C) -> &mut Self::Output {
         self.data.index_mut(index.index(&self.size))
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct RawDelimitedGrid<'r, C, T> {
+    data: &'r [T],
+    size: C,
+    raw_size: C,
+}
+
+impl<'r, C, T> RawDelimitedGrid<'r, C, T>
+where
+    C: GridCoordinate + GridCoordinate2D,
+    T: Eq,
+{
+    #[inline]
+    pub fn data(&self) -> &[T] {
+        &self.data[..self.raw_size.area()]
+    }
+
+    #[inline]
+    pub fn size(&self) -> C {
+        self.size
+    }
+
+    #[inline]
+    pub fn new(data: &'r [T], delim: T) -> Self {
+        let width = data.iter().position(|c| *c == delim).unwrap() + 1;
+        let height = data.len() / width;
+        assert_eq!(data.len() % width, 0);
+
+        Self {
+            data,
+            size: C::from_usize(width - 1, height),
+            raw_size: C::from_usize(width, height),
+        }
+    }
+
+    #[inline]
+    pub fn iter(&self) -> impl Iterator<Item = (C, &T)> {
+        let width = self.size.x();
+        self.data
+            .chunks(self.raw_size.x())
+            .flat_map(|r| r[..r.len() - 1].iter())
+            .enumerate()
+            .map(move |(i, cell)| {
+                let y = i / width;
+                let x = i % width;
+
+                (C::from_usize(x, y), cell)
+            })
+    }
+
+    #[inline]
+    pub fn rows(&self) -> impl Iterator<Item = &[T]> {
+        self.data
+            .chunks(self.raw_size.x())
+            .map(|r| &r[..r.len() - 1])
+    }
+}
+
+impl<'i, C, T> Index<C> for RawDelimitedGrid<'i, C, T>
+where
+    C: GridCoordinate,
+{
+    type Output = T;
+
+    #[inline]
+    fn index(&self, index: C) -> &Self::Output {
+        self.data.index(index.index(&self.raw_size))
     }
 }
 
