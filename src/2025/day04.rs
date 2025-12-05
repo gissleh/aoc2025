@@ -93,7 +93,8 @@ fn part_2_offsets_limited_search(grid: &Grid<(u8, u8), u8>) -> u32 {
             total += 1;
             grid[i] = BLANK;
 
-            for n in neighbors.into_iter() {
+            // The second half of them will get searched in this loop anyway
+            for n in neighbors.into_iter().take(4) {
                 if grid[n] != ROLL {
                     continue;
                 }
