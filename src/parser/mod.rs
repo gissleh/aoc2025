@@ -6,6 +6,7 @@ mod repeat;
 
 pub use number::{base10_digit, base16_digit, int, int_hex, uint, uint_hex};
 
+use crate::parser::repeat::RepeatFold;
 use and::{And, AndSkip};
 use delimited::DelimitedBy;
 use map::Map;
@@ -53,10 +54,8 @@ pub trait Parser<'i, T>: Sized {
 
     #[inline]
     fn parse_discard(&self, input: Input<'i>) -> Option<Input<'i>> {
-        match self.parse(input) {
-            Some((_, input)) => Some(input),
-            None => None,
-        }
+        let (_, input) = self.parse(input)?;
+        Some(input)
     }
 
     fn find_parsable(&self, input: Input<'i>) -> Option<(T, usize, Input<'i>)> {
@@ -95,6 +94,15 @@ pub trait Parser<'i, T>: Sized {
     #[inline]
     fn repeat<C: GatherTarget<T>>(self) -> Repeat<Self, T, C> {
         Repeat::new(self)
+    }
+
+    #[inline]
+    fn repeat_fold<FI, FS, TF>(self, fi: FI, fs: FS) -> RepeatFold<Self, T, FI, FS, TF>
+    where
+        FI: Fn() -> TF,
+        FS: Fn(&mut TF, T),
+    {
+        RepeatFold::new(self, fi, fs)
     }
 
     #[inline]
@@ -156,6 +164,25 @@ impl<'i> Parser<'i, &'static [u8]> for &'static [u8] {
     }
 }
 
+impl<'i, const N: usize> Parser<'i, &'static [u8]> for &'static [u8; N] {
+    fn parse(&self, input: Input<'i>) -> Option<(&'static [u8], Input<'i>)> {
+        if input.data.starts_with(self.as_slice()) {
+            Some((self.as_slice(), input.advance(self.len())))
+        } else {
+            None
+        }
+    }
+
+    fn find_parsable(&self, input: Input<'i>) -> Option<(&'static [u8], usize, Input<'i>)> {
+        if input.data.len() < self.len() {
+            return None;
+        }
+
+        (0..input.data.len() - self.len())
+            .find(|i| input.data[*i..].starts_with(self.as_slice()))
+            .map(|i| (self.as_slice(), i, input.advance(i + self.len())))
+    }
+}
 impl<'i, P1, T1, P2, T2> Parser<'i, (T1, T2)> for (P1, P2)
 where
     P1: Parser<'i, T1>,

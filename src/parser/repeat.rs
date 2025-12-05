@@ -58,6 +58,70 @@ where
     }
 }
 
+pub struct RepeatFold<PI, TI, FI, FS, T> {
+    inner: PI,
+    f_init: FI,
+    f_step: FS,
+    spooky_ghost: PhantomData<(TI, T)>,
+}
+
+impl<PI, TI, FI, FS, T> RepeatFold<PI, TI, FI, FS, T> {
+    #[inline]
+    pub(crate) fn new(inner: PI, f_init: FI, f_step: FS) -> Self {
+        Self {
+            inner,
+            f_init,
+            f_step,
+            spooky_ghost: Default::default(),
+        }
+    }
+}
+
+impl<'i, PI, TI, FI, FS, T> Parser<'i, T> for RepeatFold<PI, TI, FI, FS, T>
+where
+    PI: Parser<'i, TI>,
+    FI: Fn() -> T,
+    FS: Fn(&mut T, TI) -> bool,
+{
+    fn parse(&self, input: Input<'i>) -> Option<(T, Input<'i>)> {
+        let (first, mut input) = self.inner.parse(input.with_index(0))?;
+        let mut result = (self.f_init)();
+        let mut index = 1;
+
+        if (self.f_step)(&mut result, first) {
+            while let Some((inner_result, next)) = self.inner.parse(input.with_index(index)) {
+                index += 1;
+                input = next;
+
+                if !(self.f_step)(&mut result, inner_result) {
+                    break;
+                }
+            }
+        }
+
+        Some((result, input))
+    }
+
+    fn find_parsable(&self, input: Input<'i>) -> Option<(T, usize, Input<'i>)> {
+        let (first, offset, mut input) = self.inner.find_parsable(input.with_index(0))?;
+        let mut result = (self.f_init)();
+        let mut index = 1;
+
+        if (self.f_step)(&mut result, first) {
+            while let Some((inner_result, next)) = self.inner.parse(input.with_index(index)) {
+                index += 1;
+                input = next;
+
+                if !(self.f_step)(&mut result, inner_result) {
+                    break;
+                }
+            }
+        }
+
+        Some((result, offset, input))
+    }
+}
+
 pub trait GatherTarget<T> {
     fn init(size_hint: usize) -> Self;
     fn gather(&mut self, index: usize, t: T) -> bool;
