@@ -284,7 +284,10 @@ where
 
 pub fn load_input(year: u16, day_number: u16) -> Vec<u8> {
     let mut buf = Vec::with_capacity(2048);
-    let file_name = format!("./input/{}/day_{:02}.txt", year, day_number);
+    let file_name = format!(
+        "/tmp/advent-of-code-{}-day-{:02}-input.txt",
+        year, day_number
+    );
     match File::open(file_name.clone()) {
         Ok(mut file) => {
             file.read_to_end(&mut buf).expect("Could not read file");
@@ -318,6 +321,8 @@ pub fn load_input(year: u16, day_number: u16) -> Vec<u8> {
                 .expect("could not read file");
 
             buf.extend(data.iter());
+
+            eprintln!("Saving input as {file_name}");
 
             let mut file = OpenOptions::new()
                 .write(true)
