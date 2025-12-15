@@ -3,7 +3,7 @@ use crate::search::{Dijkstra, KCS, Search};
 use chrono::Datelike;
 use hashbrown::HashMap;
 use std::fmt::{Debug, Display, Formatter};
-use std::fs::{File, OpenOptions, create_dir_all};
+use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::iter::Sum;
 use std::ops::Add;
