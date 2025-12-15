@@ -305,7 +305,6 @@ pub fn load_input(year: u16, day_number: u16) -> Vec<u8> {
 
             eprintln!("Downloading input for day {}...", day_number);
 
-            create_dir_all(format!("./input/{}", year)).expect("Could not create dir");
             let data = reqwest::blocking::Client::builder()
                 .build()
                 .unwrap()
