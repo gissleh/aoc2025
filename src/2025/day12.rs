@@ -174,7 +174,8 @@ impl RegionSpec {
             })
     }
 
-    pub fn try_dfs(&self, set: &[PresentSet]) -> Option<Space> {
+    #[allow(dead_code)]
+    pub fn try_dfs(&self, _set: &[PresentSet]) -> Option<Space> {
         let mut stack = Vec::with_capacity(512);
         stack.push((Space::new(self.size), self.presents));
 

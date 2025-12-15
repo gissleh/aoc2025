@@ -1,3 +1,4 @@
+use std::hash::{Hash, Hasher};
 use std::ops::{Index, IndexMut};
 
 #[derive(Clone)]
@@ -5,6 +6,27 @@ pub struct Grid<C, T> {
     data: Vec<T>,
     size: C,
     width: usize,
+}
+
+impl<C, T> PartialEq<Self> for Grid<C, T>
+where
+    T: Eq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.data.eq(&other.data)
+    }
+}
+
+impl<C, T> Eq for Grid<C, T> where T: Eq {}
+
+impl<C, T> Hash for Grid<C, T>
+where
+    Vec<T>: Hash + Eq,
+{
+    #[inline]
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.data.hash(state)
+    }
 }
 
 impl<C, T> Grid<C, T>
@@ -240,6 +262,24 @@ where
         self.data
             .chunks(self.raw_size.x())
             .map(|r| &r[..r.len() - 1])
+    }
+}
+
+impl<'r, C, T> RawDelimitedGrid<'r, C, T>
+where
+    C: GridCoordinate + GridCoordinate2D,
+    T: Eq + Copy,
+{
+    #[inline]
+    pub fn to_editable(&self) -> Grid<C, T> {
+        let mut res = Vec::with_capacity(self.size.area());
+        let row_width = self.size.x();
+        for i in 0..self.size.y() {
+            let offset = self.raw_size.x() * i;
+            res.extend(self.data[offset..offset + row_width].iter().copied());
+        }
+
+        Grid::new(res, self.size)
     }
 }
 

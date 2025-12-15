@@ -41,7 +41,10 @@ where
             match self.delimiter.find_parsable(input) {
                 Some((_, offset, input)) => match self.inner.parse(input) {
                     Some((res, input)) => Some((res, offset, input)),
-                    None => None,
+                    None => match self.find_parsable(input.advance(offset + 1)) {
+                        Some((res, offset2, input)) => Some((res, offset + 1 + offset2, input)),
+                        None => None,
+                    },
                 },
                 None => None,
             }

@@ -7,6 +7,7 @@ pub mod aoc;
 pub mod geo;
 pub mod graph;
 pub mod grid;
+pub mod intcode;
 pub mod math;
 pub mod parser;
 pub mod search;

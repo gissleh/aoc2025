@@ -13,6 +13,7 @@ use std::ops::RangeInclusive;
 pub use bytes::n_bytes;
 pub use number::{base10_digit, base16_digit, int, int_hex, uint, uint_hex};
 
+use crate::parser::and::AndInstead;
 use and::AndSkipAny;
 use and::{And, AndSkip};
 use delimited::DelimitedBy;
@@ -117,6 +118,11 @@ pub trait Parser<'i, T>: Sized {
     }
 
     #[inline]
+    fn and_instead<TR, PR>(self, pr: PR) -> AndInstead<Self, PR, T, TR> {
+        AndInstead::new(self, pr)
+    }
+
+    #[inline]
     fn and_skip_any<TR, PR>(self, pr: PR) -> AndSkipAny<Self, PR, T, TR> {
         AndSkipAny::new(self, pr)
     }
@@ -138,7 +144,12 @@ pub trait Parser<'i, T>: Sized {
 
     #[inline]
     fn repeat<C: GatherTarget<T>>(self) -> Repeat<Self, T, C> {
-        Repeat::new(self)
+        Repeat::new(self, 1)
+    }
+
+    #[inline]
+    fn repeat_with_capacity<C: GatherTarget<T>>(self, cap: usize) -> Repeat<Self, T, C> {
+        Repeat::new(self, cap)
     }
 
     #[inline]

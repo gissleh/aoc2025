@@ -3,14 +3,16 @@ use std::marker::PhantomData;
 
 pub struct Repeat<PI, TI, C> {
     inner: PI,
+    size_hint: usize,
     spooky_ghost: PhantomData<(TI, C)>,
 }
 
 impl<PI, TI, C> Repeat<PI, TI, C> {
     #[inline]
-    pub(crate) fn new(inner: PI) -> Self {
+    pub(crate) fn new(inner: PI, size_hint: usize) -> Self {
         Self {
             inner,
+            size_hint,
             spooky_ghost: Default::default(),
         }
     }
@@ -24,7 +26,7 @@ where
     fn parse(&self, input: Input<'i>) -> Option<(C, Input<'i>)> {
         let (first, mut input) = self.inner.parse(input.with_index(0))?;
 
-        let mut res = C::init(1);
+        let mut res = C::init(self.size_hint);
         if res.gather(0, first) {
             let mut index = 1;
             while let Some((v, next)) = self.inner.parse(input.with_index(index)) {

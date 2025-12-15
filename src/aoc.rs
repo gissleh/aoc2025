@@ -96,6 +96,10 @@ impl Runner {
         v
     }
 
+    pub fn mark_dead_end(&mut self, src: &'static str) {
+        self.link(src, src);
+    }
+
     pub fn link(&mut self, src: &'static str, dst: &'static str) {
         self.graph.connect(
             self.graph.node(&src).unwrap(),

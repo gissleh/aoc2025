@@ -2,6 +2,7 @@ use common::aoc::Runner;
 use common::math::Matrix;
 use common::parser::{Parser, base10_digit, uint};
 use common::search::{BFS, KS, Search};
+use hashbrown::HashMap;
 use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::ParallelIterator;
 
@@ -10,6 +11,8 @@ pub fn main(r: &mut Runner, input: &[u8]) {
 
     r.part("Part 1", || part_1(&machines));
     r.part("Part 2", || part_2(&machines));
+    r.set_tail("Part 1");
+    r.part("Part 2 (Alt)", || part_2_alt(&machines));
 
     r.info("Machines", machines.len());
 }
@@ -20,6 +23,26 @@ fn part_1(machines: &[Machine]) -> u32 {
 
 fn part_2(machines: &[Machine]) -> u32 {
     machines.par_iter().map(|m| m.fewest_presses_jl()).sum()
+}
+
+fn part_2_alt(machines: &[Machine]) -> u32 {
+    machines
+        .par_iter()
+        .map(|m| {
+            let mut cache = HashMap::new();
+            let mut pattern_cache = HashMap::new();
+
+            let mut remaining = [0u16; 16];
+            for (i, j) in m.joltages.iter().enumerate() {
+                remaining[i] = *j;
+            }
+
+            #[cfg(test)]
+            println!("f({:?})", &remaining[..m.joltages.len()]);
+
+            m.fewest_presses_jl_alt(remaining, &mut cache, &mut pattern_cache, 1)
+        })
+        .sum()
 }
 
 fn parse(input: &[u8]) -> Vec<Machine> {
@@ -44,18 +67,24 @@ impl Machine {
     }
 
     #[inline]
-    #[allow(dead_code)]
-    fn press_jl(state: [u16; 16], button: u16, times: u16) -> [u16; 16] {
+    fn press_jl(state: [u16; 16], button: u16, times: u16) -> Option<[u16; 16]> {
         let mut current = button;
         let mut next = state;
         for i in 0..16 {
             if current & 1 == 1 {
-                next[i] += times;
+                if next[i] < times {
+                    return None;
+                }
+
+                next[i] -= times;
             }
             current >>= 1;
+            if current == 0 {
+                break;
+            }
         }
 
-        next
+        Some(next)
     }
 
     #[inline]
@@ -87,20 +116,123 @@ impl Machine {
     }
 
     fn fewest_presses_il(&self) -> u32 {
-        let mut search = BFS::with_capacity([0u64; 1024], 1024);
-        search.push(KS(0u16, 0u16));
+        let mut search = BFS::new([0u64; 1024]);
+        search.reset();
+        search.push(KS(0, (0u16, 0u16)));
 
-        while let Some(KS(state, presses)) = search.pop() {
-            if state == self.state {
-                return presses as u32;
+        self.fewest_presses_il_next(self.state, &mut search)
+            .unwrap()
+            .0
+    }
+
+    fn fewest_presses_il_next(
+        &self,
+        target: u16,
+        search: &mut BFS<KS<u16, (u16, u16)>, u16, [u64; 1024]>,
+    ) -> Option<(u32, u16)> {
+        while let Some(KS(presses_log, (presses, state))) = search.pop() {
+            if state == target {
+                return Some((presses as u32, presses_log));
             }
 
-            for button in self.buttons.iter() {
-                search.push(KS(Self::press_il(state, *button), presses + 1));
+            for (i, button) in self.buttons.iter().enumerate() {
+                let log_bit = 1 << i;
+                if presses_log & log_bit == log_bit {
+                    continue;
+                }
+
+                search.push(KS(
+                    presses_log | log_bit,
+                    (presses + 1, Self::press_il(state, *button)),
+                ));
             }
         }
 
-        panic!("NOT FOUND {:010b}", self.state)
+        None
+    }
+
+    fn il_patterns(&self, il: u16) -> Vec<u16> {
+        (0..1 << self.buttons.len())
+            .filter(|v| {
+                let mut v = *v;
+                let mut res = 0;
+                for b in self.buttons.iter() {
+                    if v & 1 == 1 {
+                        res = Self::press_il(res, *b);
+                    }
+                    v >>= 1;
+                }
+
+                res == il
+            })
+            .collect()
+    }
+
+    fn fewest_presses_jl_alt(
+        &self,
+        remaining: [u16; 16],
+        cache: &mut HashMap<[u16; 16], u32>,
+        pattern_cache: &mut HashMap<u16, Vec<u16>>,
+        level: usize,
+    ) -> u32 {
+        if remaining == [0u16; 16] {
+            return 0;
+        } else if let Some(res) = cache.get(&remaining) {
+            #[cfg(test)]
+            println!("{: <1$}cached {2}", "", level * 2, cache.len(),);
+
+            return *res;
+        }
+
+        let mut il = 0;
+        for i in 0..remaining.len() {
+            if remaining[i] & 1 == 1 {
+                il |= 1 << i;
+            }
+        }
+
+        let patterns = pattern_cache
+            .entry(il)
+            .or_insert_with(|| self.il_patterns(il))
+            .clone();
+        let mut best = 10000;
+        'check_loop: for mut il_log in patterns {
+            let il_presses = il_log.count_ones();
+            let mut remaining = remaining;
+            for b in self.buttons.iter() {
+                if il_log & 1 == 1 {
+                    if let Some(next) = Self::press_jl(remaining, *b, 1) {
+                        remaining = next;
+                    } else {
+                        continue 'check_loop;
+                    }
+                }
+                il_log >>= 1;
+            }
+
+            let remaining_half = remaining.map(|v| v / 2);
+
+            #[cfg(test)]
+            println!(
+                "{: <1$}{il_presses} + (2 * f({2:?}))",
+                "",
+                level * 2,
+                &remaining_half[..self.joltages.len()],
+            );
+
+            let res = il_presses
+                + (2 * self.fewest_presses_jl_alt(remaining_half, cache, pattern_cache, level + 1));
+            if res < best {
+                best = res;
+
+                if best == 0 {
+                    break;
+                }
+            }
+        }
+
+        cache.insert(remaining, best);
+        best
     }
 
     fn fewest_presses_jl(&self) -> u32 {
@@ -362,26 +494,6 @@ mod tests {
     }
 
     #[test]
-    fn jl_button_presses_work() {
-        assert_eq!(
-            Machine::press_jl([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 0b1000, 3),
-            [0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-        );
-        assert_eq!(
-            Machine::press_jl([0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 0b1010, 1),
-            [0, 1, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-        );
-        assert_eq!(
-            Machine::press_jl([0, 1, 0, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 0b0101, 1),
-            [1, 1, 1, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-        );
-        assert_eq!(
-            Machine::press_jl([1, 1, 1, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 0b0011, 2),
-            [3, 3, 1, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-        );
-    }
-
-    #[test]
     fn dependencies_works() {
         let machines = parse(EXAMPLE);
         assert_eq!(machines.len(), 3);
@@ -403,6 +515,48 @@ mod tests {
     }
 
     #[test]
+    fn fewest_presses_il_next_works() {
+        let machines = parse(EXAMPLE);
+        assert_eq!(machines.len(), 3);
+
+        let mut search = BFS::new([0u64; 1024]);
+        search.push(KS(0b0000, (0, 0)));
+
+        // [.##.] (3) (1,3) (2) (2,3) (0,2) (0,1) {3,5,4,7}
+        assert_eq!(
+            machines[0].fewest_presses_il_next(0b1011, &mut search),
+            Some((2, 0b100001))
+        );
+        assert_eq!(
+            machines[0].fewest_presses_il_next(0b1011, &mut search),
+            Some((3, 0b010110))
+        );
+        assert_eq!(
+            machines[0].fewest_presses_il_next(0b1011, &mut search),
+            Some((3, 0b101100))
+        );
+        assert_eq!(
+            machines[0].fewest_presses_il_next(0b1011, &mut search),
+            Some((4, 0b011011))
+        );
+        assert_eq!(
+            machines[0].fewest_presses_il_next(0b1011, &mut search),
+            None
+        );
+    }
+
+    #[test]
+    fn fewest_presses_il_next_works_2() {
+        let machines = parse(EXAMPLE);
+        assert_eq!(machines.len(), 3);
+
+        assert_eq!(
+            machines[0].il_patterns(0b1011),
+            vec![0b010110, 0b011011, 0b100001, 0b101100,]
+        )
+    }
+
+    #[test]
     fn fewest_presses_jl_works() {
         let machines = parse(EXAMPLE);
         assert_eq!(machines.len(), 3);
@@ -410,5 +564,12 @@ mod tests {
         assert_eq!(machines[0].fewest_presses_jl(), 10);
         assert_eq!(machines[1].fewest_presses_jl(), 12);
         assert_eq!(machines[2].fewest_presses_jl(), 11);
+    }
+
+    #[test]
+    fn part_2_alt_works_on_examples() {
+        let machines = parse(EXAMPLE);
+        assert_eq!(machines.len(), 3);
+        assert_eq!(part_2_alt(&machines), 33);
     }
 }
